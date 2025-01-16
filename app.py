@@ -3,33 +3,53 @@ from flask_cors import CORS
 from scriptFetcher import analyze_transcript_compliance
 from dotenv import load_dotenv
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app)
 
+# Use environment variable for secret key
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-key-please-change')
 
 @app.route('/')
 def home():
-    return render_template('index.html')
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        logger.error(f"Error in home route: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    video_id = request.form.get('video_id')
-    if not video_id:
-        return jsonify({'error': 'No video ID provided'})
-    
-    results = analyze_transcript_compliance(video_id)
-    
-    if results.empty:
-        return jsonify({'message': 'No compliance issues found'})
-    
-    return jsonify({
-        'matches': results.to_dict('records')
-    })
+    try:
+        video_id = request.form.get('video_id')
+        if not video_id:
+            return jsonify({'error': 'No video ID provided'}), 400
+        
+        results = analyze_transcript_compliance(video_id)
+        
+        if results.empty:
+            return jsonify({'message': 'No compliance issues found'})
+        
+        return jsonify({
+            'matches': results.to_dict('records')
+        })
+    except Exception as e:
+        logger.error(f"Error in analyze route: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+# Add health check endpoint
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy'}), 200
 
 if __name__ == '__main__':
-    app.run(debug=os.getenv('DEBUG', 'True') == 'True') 
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=os.getenv('DEBUG', 'False') == 'True') 
