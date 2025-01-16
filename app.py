@@ -1,9 +1,16 @@
 from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 from scriptFetcher import analyze_transcript_compliance
+from dotenv import load_dotenv
 import os
 
+# Load environment variables
+load_dotenv()
+
 app = Flask(__name__)
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'bc413485091516d4a7fd5dcba443ad75')
+CORS(app)  # Enable CORS for all routes
+
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-key-please-change')
 
 @app.route('/')
 def home():
@@ -25,4 +32,4 @@ def analyze():
     })
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    app.run(debug=os.getenv('DEBUG', 'True') == 'True') 
