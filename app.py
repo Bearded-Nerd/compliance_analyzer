@@ -1,7 +1,9 @@
 from flask import Flask, render_template, request, jsonify
 from scriptFetcher import analyze_transcript_compliance
+import os
 
 app = Flask(__name__)
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'bc413485091516d4a7fd5dcba443ad75')
 
 @app.route('/')
 def home():
