@@ -3,6 +3,9 @@ from youtube_transcript_api import YouTubeTranscriptApi
 import pandas as pd
 from youtube_dl import YoutubeDL
 import logging
+from functools import lru_cache
+import concurrent.futures
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,11 @@ def get_auto_transcript(video_id: str) -> str:
         logger.error(f"Error getting auto transcript: {str(e)}")
     return ""
 
+# Add caching to transcript fetching
+@lru_cache(maxsize=100)
+def get_cached_transcript(video_id: str) -> str:
+    return get_auto_transcript(video_id)
+
 def analyze_transcript_compliance(video_id: str) -> tuple:
     """
     Analyzes a video transcript and returns both full text and compliance matches.
@@ -38,17 +46,17 @@ def analyze_transcript_compliance(video_id: str) -> tuple:
         tuple: (full_text, matches_df, word_positions)
     """
     try:
-        # First try with youtube_transcript_api
-        try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id)
-            script_text = ' '.join(entry['text'] for entry in transcript)
-        except Exception as e:
-            logger.warning(f"Could not get transcript with primary method: {str(e)}")
-            # Fallback to youtube-dl method
-            script_text = get_auto_transcript(video_id)
-            if not script_text:
-                raise Exception("Could not retrieve transcript with any method")
-        
+        # Use ThreadPoolExecutor with timeout
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(get_cached_transcript, video_id)
+            try:
+                script_text = future.result(timeout=20)  # 20 second timeout
+            except concurrent.futures.TimeoutError:
+                raise Exception("Transcript fetching timed out")
+            
+        if not script_text:
+            raise Exception("Could not retrieve transcript")
+            
         # Read the compliant words list CSV file
         compliant_words_df = pd.read_csv('compliant_word_list.csv')
         word_list = compliant_words_df[['Name', 'Risk Rating']].dropna()
@@ -84,5 +92,5 @@ def analyze_transcript_compliance(video_id: str) -> tuple:
         return script_text, matches_df if not matches_df.empty else pd.DataFrame(columns=['Word', 'Risk Rating']), word_positions
         
     except Exception as e:
-        logger.error(f"Error analyzing transcript: {str(e)}")
-        return "", pd.DataFrame(columns=['Word', 'Risk Rating']), {}
+        logger.error(f"Error in analyze_transcript_compliance: {str(e)}")
+        raise
