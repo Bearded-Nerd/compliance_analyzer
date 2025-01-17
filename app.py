@@ -35,6 +35,10 @@ def analyze():
         
         transcript_text, results, word_positions = analyze_transcript_compliance(video_id)
         
+        # Check if transcript was successfully fetched
+        if not transcript_text:
+            return jsonify({'error': 'Failed to fetch transcript. The video might be unavailable or have no captions.'}), 404
+        
         if results.empty:
             return jsonify({
                 'message': 'No compliance issues found',
