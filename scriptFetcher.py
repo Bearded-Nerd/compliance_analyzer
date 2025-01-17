@@ -26,15 +26,12 @@ def fetch_transcript(video_id: str) -> None:
 # Example usage:
 # fetch_transcript("pxiP-HJLCx0")
 
-def analyze_transcript_compliance(video_id: str) -> pd.DataFrame:
+def analyze_transcript_compliance(video_id: str) -> tuple:
     """
-    Analyzes a video transcript for compliance words and returns matches with risk levels.
+    Analyzes a video transcript and returns both full text and compliance matches.
     
-    Args:
-        video_id (str): YouTube video ID
-        
     Returns:
-        pd.DataFrame: DataFrame containing matched words and their risk levels
+        tuple: (full_text, matches_df, word_positions)
     """
     try:
         # Get transcript for the specified video
@@ -44,14 +41,16 @@ def analyze_transcript_compliance(video_id: str) -> pd.DataFrame:
         script_text = ' '.join(entry['text'] for entry in transcript)
         
         # Read the compliant words list CSV file
-        compliant_words_df = pd.read_csv('Compliant Word List.csv')
+        compliant_words_df = pd.read_csv('compliant_word_list.csv')
         word_list = compliant_words_df[['Name', 'Risk Rating']].dropna()
         
         # Convert script to lowercase for case-insensitive matching
         script_text_lower = script_text.lower()
         
-        # Find matches
+        # Find matches and their positions
         matches = []
+        word_positions = {}  # Store word positions for highlighting
+        
         for _, row in word_list.iterrows():
             word = row['Name'].lower()
             if word in script_text_lower:
@@ -59,11 +58,22 @@ def analyze_transcript_compliance(video_id: str) -> pd.DataFrame:
                     'Word': row['Name'],
                     'Risk Rating': row['Risk Rating']
                 })
+                # Find all occurrences of the word
+                start = 0
+                while True:
+                    pos = script_text_lower.find(word, start)
+                    if pos == -1:
+                        break
+                    word_positions[pos] = {
+                        'word': row['Name'],
+                        'risk': row['Risk Rating'],
+                        'length': len(word)
+                    }
+                    start = pos + 1
         
-        # Create DataFrame from matches
         matches_df = pd.DataFrame(matches)
-        return matches_df if not matches_df.empty else pd.DataFrame(columns=['Word', 'Risk Rating'])
+        return script_text, matches_df if not matches_df.empty else pd.DataFrame(columns=['Word', 'Risk Rating']), word_positions
         
     except Exception as e:
         print(f"Error analyzing transcript: {str(e)}")
-        return pd.DataFrame(columns=['Word', 'Risk Rating'])
+        return "", pd.DataFrame(columns=['Word', 'Risk Rating']), {}
