@@ -67,6 +67,14 @@
         50% { opacity: 1; }
         100% { opacity: 0.6; }
         }
+        .error-message {
+        color: #ff3860;
+        background-color: rgba(255, 56, 96, 0.1);
+        padding: 1rem;
+        border-radius: 4px;
+        margin: 1rem 0;
+        display: none;
+        }
     </style>
 </head>
 <body class="min-h-screen bg-black text-white p-8">
@@ -136,7 +144,50 @@
                     return 'bg-[#FF00FF]/30';
             }
         }
+        function analyzeVideo() {
+        const videoUrl = document.getElementById('videoUrl').value;
+        const videoId = extractVideoId(videoUrl);
+        const errorMessage = document.getElementById('errorMessage');
+        const highlightedTranscript = document.getElementById('highlightedTranscript');
+        
+        if (!videoId) {
+            errorMessage.textContent = 'Please enter a valid YouTube URL';
+            errorMessage.style.display = 'block';
+            return;
+        }
 
+        try {
+            const formData = new FormData();
+            formData.append('video_id', videoId);
+
+            const response = fetch('/analyze', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to analyze video');
+            }
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            // Clear any previous errors
+            errorMessage.style.display = 'none';
+            
+            // Process successful response
+            highlightedTranscript.innerHTML = data.transcript;
+            // ... rest of your success handling code ...
+
+        } catch (error) {
+            errorMessage.textContent = error.message;
+            errorMessage.style.display = 'block';
+            highlightedTranscript.innerHTML = '';
+        }
+    }
         function highlightTranscript(text, positions) {
             let html = text;
             let offset = 0;
