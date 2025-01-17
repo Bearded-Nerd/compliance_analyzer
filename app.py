@@ -32,13 +32,17 @@ def analyze():
         video_id = request.form.get('video_id')
         if not video_id:
             return jsonify({'error': 'No video ID provided'}), 400
-        
-        transcript_text, results, word_positions = analyze_transcript_compliance(video_id)
-        
-        # Check if transcript was successfully fetched
+            
+        try:
+            transcript_text, results, word_positions = analyze_transcript_compliance(video_id)
+        except Exception as e:
+            if "timed out" in str(e).lower():
+                return jsonify({'error': 'Analysis timed out. Please try again.'}), 504
+            raise
+            
         if not transcript_text:
             return jsonify({'error': 'Failed to fetch transcript. The video might be unavailable or have no captions.'}), 404
-        
+            
         if results.empty:
             return jsonify({
                 'message': 'No compliance issues found',
@@ -53,7 +57,7 @@ def analyze():
         })
     except Exception as e:
         logger.error(f"Error in analyze route: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({'error': str(e)}), 500
 
 # Add health check endpoint
 @app.route('/health')
