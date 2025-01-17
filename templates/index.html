@@ -86,7 +86,7 @@
         </div>
         
         <div class="p-6">
-            <form id="analyzeForm" class="flex gap-4 mb-8">
+            <div id="analyzeForm" class="flex gap-4 mb-8">
                 <input 
                     type="text" 
                     id="video_id" 
@@ -97,15 +97,12 @@
                 >
                 <button 
                     type="submit" 
+                    id="analyzeButton"
                     class="bg-[#FF00FF] hover:bg-[#FF00FF]/90 text-white px-4 py-2 rounded-md flex items-center"
                 >
-                    <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
                     Analyze
                 </button>
-            </form>
+            </div>
 
             <div class="loading" id="loading">Analyzing transcript...</div>
 
@@ -209,59 +206,54 @@
             return html;
         }
 
-        document.getElementById('analyzeForm').onsubmit = async (e) => {
+        document.getElementById('analyzeForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
+            const videoId = document.getElementById('video_id').value;
+            const button = document.getElementById('analyzeButton');
             const loading = document.getElementById('loading');
-            const resultsBody = document.getElementById('resultsBody');
-            const transcriptContainer = document.getElementById('transcriptContainer');
-            const highlightedTranscript = document.getElementById('highlightedTranscript');
+            const errorMessage = document.getElementById('errorMessage');
             
+            // Reset UI
+            errorMessage.style.display = 'none';
+            button.disabled = true;
             loading.style.display = 'block';
-            resultsBody.innerHTML = '';
-            transcriptContainer.classList.add('hidden');
-            
-            const formData = new FormData(e.target);
             
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+                
                 const response = await fetch('/analyze', {
                     method: 'POST',
-                    body: formData
+                    body: new FormData(this),
+                    signal: controller.signal
                 });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(await response.text() || 'Failed to analyze video');
+                }
                 
                 const data = await response.json();
                 
                 if (data.error) {
-                    resultsBody.innerHTML = `<tr><td colspan="2" class="text-red-500">${data.error}</td></tr>`;
-                } else {
-                    // Show transcript with highlights
-                    if (data.transcript) {
-                        transcriptContainer.classList.remove('hidden');
-                        highlightedTranscript.innerHTML = highlightTranscript(data.transcript, data.positions);
-                    }
-                    
-                    // Show matches table
-                    if (data.matches) {
-                        resultsBody.innerHTML = data.matches.map(match => `
-                            <tr class="border-b border-[#FF00FF]/20">
-                                <td class="py-3 font-medium text-white">${match.Word}</td>
-                                <td class="py-3">
-                                    <span class="risk-badge risk-${match['Risk Rating'].toLowerCase()}">
-                                        ${match['Risk Rating']}
-                                    </span>
-                                </td>
-                            </tr>
-                        `).join('');
-                    } else if (data.message) {
-                        resultsBody.innerHTML = `<tr><td colspan="2">${data.message}</td></tr>`;
-                    }
+                    throw new Error(data.error);
                 }
+                
+                // Process results...
+                displayResults(data);
+                
             } catch (error) {
-                resultsBody.innerHTML = `<tr><td colspan="2" class="text-red-500">Error: ${error.message}</td></tr>`;
+                errorMessage.textContent = error.name === 'AbortError' 
+                    ? 'Request timed out. Please try again.' 
+                    : error.message;
+                errorMessage.style.display = 'block';
             } finally {
+                button.disabled = false;
                 loading.style.display = 'none';
             }
-        };
+        });
     </script>
 </body>
 </html> 
