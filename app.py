@@ -33,13 +33,19 @@ def analyze():
         if not video_id:
             return jsonify({'error': 'No video ID provided'}), 400
         
-        results = analyze_transcript_compliance(video_id)
+        transcript_text, results, word_positions = analyze_transcript_compliance(video_id)
         
         if results.empty:
-            return jsonify({'message': 'No compliance issues found'})
+            return jsonify({
+                'message': 'No compliance issues found',
+                'transcript': transcript_text,
+                'positions': word_positions
+            })
         
         return jsonify({
-            'matches': results.to_dict('records')
+            'matches': results.to_dict('records'),
+            'transcript': transcript_text,
+            'positions': word_positions
         })
     except Exception as e:
         logger.error(f"Error in analyze route: {str(e)}")
