@@ -70,6 +70,11 @@
             <div class="loading" id="loading">Analyzing transcript...</div>
 
             <div id="results">
+                <div id="transcriptContainer" class="mb-8 p-4 bg-gray-900 rounded-lg hidden">
+                    <h2 class="text-[#FF00FF] text-xl mb-4">Transcript Analysis</h2>
+                    <div id="highlightedTranscript" class="whitespace-pre-wrap text-white"></div>
+                </div>
+
                 <table class="w-full">
                     <thead>
                         <tr class="border-b border-[#FF00FF]/20">
@@ -86,14 +91,52 @@
     </div>
 
     <script>
+        function getRiskColor(risk) {
+            risk = risk.toLowerCase();
+            switch (risk) {
+                case 'low':
+                    return 'bg-green-500/30';
+                case 'medium':
+                    return 'bg-yellow-500/30';
+                case 'high':
+                    return 'bg-red-500/30';
+                default:
+                    return 'bg-[#FF00FF]/30';
+            }
+        }
+
+        function highlightTranscript(text, positions) {
+            let html = text;
+            let offset = 0;
+            
+            // Sort positions by their starting position (descending to avoid offset issues)
+            const sortedPositions = Object.entries(positions)
+                .sort((a, b) => parseInt(b[0]) - parseInt(a[0]));
+            
+            for (const [pos, data] of sortedPositions) {
+                const position = parseInt(pos);
+                const riskClass = getRiskColor(data.risk);
+                const word = text.substr(position, data.length);
+                
+                html = html.slice(0, position) +
+                       `<span class="${riskClass} px-1 rounded" title="${data.risk} risk">${word}</span>` +
+                       html.slice(position + data.length);
+            }
+            
+            return html;
+        }
+
         document.getElementById('analyzeForm').onsubmit = async (e) => {
             e.preventDefault();
             
             const loading = document.getElementById('loading');
-            const results = document.getElementById('results');
+            const resultsBody = document.getElementById('resultsBody');
+            const transcriptContainer = document.getElementById('transcriptContainer');
+            const highlightedTranscript = document.getElementById('highlightedTranscript');
             
             loading.style.display = 'block';
-            results.innerHTML = '';
+            resultsBody.innerHTML = '';
+            transcriptContainer.classList.add('hidden');
             
             const formData = new FormData(e.target);
             
@@ -106,28 +149,32 @@
                 const data = await response.json();
                 
                 if (data.error) {
-                    results.innerHTML = `<p class="error">${data.error}</p>`;
-                } else if (data.message) {
-                    results.innerHTML = `<p>${data.message}</p>`;
+                    resultsBody.innerHTML = `<tr><td colspan="2" class="text-red-500">${data.error}</td></tr>`;
                 } else {
-                    const table = `
-                        <table border="1">
-                            <tr>
-                                <th>Word</th>
-                                <th>Risk Level</th>
+                    // Show transcript with highlights
+                    if (data.transcript) {
+                        transcriptContainer.classList.remove('hidden');
+                        highlightedTranscript.innerHTML = highlightTranscript(data.transcript, data.positions);
+                    }
+                    
+                    // Show matches table
+                    if (data.matches) {
+                        resultsBody.innerHTML = data.matches.map(match => `
+                            <tr class="border-b border-[#FF00FF]/20">
+                                <td class="py-3 font-medium text-white">${match.Word}</td>
+                                <td class="py-3">
+                                    <span class="risk-badge risk-${match['Risk Rating'].toLowerCase()}">
+                                        ${match['Risk Rating']}
+                                    </span>
+                                </td>
                             </tr>
-                            ${data.matches.map(match => `
-                                <tr>
-                                    <td>${match.Word}</td>
-                                    <td class="risk-${match['Risk Rating'].toLowerCase()}">${match['Risk Rating']}</td>
-                                </tr>
-                            `).join('')}
-                        </table>
-                    `;
-                    results.innerHTML = table;
+                        `).join('');
+                    } else if (data.message) {
+                        resultsBody.innerHTML = `<tr><td colspan="2">${data.message}</td></tr>`;
+                    }
                 }
             } catch (error) {
-                results.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                resultsBody.innerHTML = `<tr><td colspan="2" class="text-red-500">Error: ${error.message}</td></tr>`;
             } finally {
                 loading.style.display = 'none';
             }
