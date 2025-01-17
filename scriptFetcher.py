@@ -1,30 +1,34 @@
 import json
 from youtube_transcript_api import YouTubeTranscriptApi
 import pandas as pd
+from youtube_dl import YoutubeDL
+import logging
 
-def fetch_transcript(video_id: str) -> None:
+logger = logging.getLogger(__name__)
+
+def get_auto_transcript(video_id: str) -> str:
     """
-    Fetches transcript for a YouTube video and saves it as JSON.
-    
-    Args:
-        video_id (str): YouTube video ID
+    Attempts to get auto-generated transcript using youtube-dl as fallback
     """
     try:
-        # Get transcript for the specified video
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        ydl_opts = {
+            'writeautomaticsub': True,
+            'skip_download': True,
+            'quiet': True
+        }
         
-        # Create output filename using video ID
-        output_file = f"transcript_{video_id}.json"
-        
-        # Write transcript to JSON file
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(transcript, f, ensure_ascii=False, indent=2)
-            
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            if 'automatic_captions' in info and 'en' in info['automatic_captions']:
+                captions = info['automatic_captions']['en']
+                text_parts = []
+                for caption in captions:
+                    if 'text' in caption:
+                        text_parts.append(caption['text'])
+                return ' '.join(text_parts)
     except Exception as e:
-        print(f"Error fetching transcript: {str(e)}")
-
-# Example usage:
-# fetch_transcript("pxiP-HJLCx0")
+        logger.error(f"Error getting auto transcript: {str(e)}")
+    return ""
 
 def analyze_transcript_compliance(video_id: str) -> tuple:
     """
@@ -34,11 +38,16 @@ def analyze_transcript_compliance(video_id: str) -> tuple:
         tuple: (full_text, matches_df, word_positions)
     """
     try:
-        # Get transcript for the specified video
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-        
-        # Combine all text from transcript
-        script_text = ' '.join(entry['text'] for entry in transcript)
+        # First try with youtube_transcript_api
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            script_text = ' '.join(entry['text'] for entry in transcript)
+        except Exception as e:
+            logger.warning(f"Could not get transcript with primary method: {str(e)}")
+            # Fallback to youtube-dl method
+            script_text = get_auto_transcript(video_id)
+            if not script_text:
+                raise Exception("Could not retrieve transcript with any method")
         
         # Read the compliant words list CSV file
         compliant_words_df = pd.read_csv('compliant_word_list.csv')
@@ -75,5 +84,5 @@ def analyze_transcript_compliance(video_id: str) -> tuple:
         return script_text, matches_df if not matches_df.empty else pd.DataFrame(columns=['Word', 'Risk Rating']), word_positions
         
     except Exception as e:
-        print(f"Error analyzing transcript: {str(e)}")
+        logger.error(f"Error analyzing transcript: {str(e)}")
         return "", pd.DataFrame(columns=['Word', 'Risk Rating']), {}
