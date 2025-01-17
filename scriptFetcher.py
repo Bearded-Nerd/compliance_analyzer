@@ -1,31 +1,44 @@
 import pandas as pd
-from youtube_dl import YoutubeDL
+from yt_dlp import YoutubeDL
 import logging
 
 logger = logging.getLogger(__name__)
 
-def get_transcript(video_id: str) -> str:
-    """Get transcript using youtube-dl"""
+def get_transcript(video_url: str) -> str:
+    """Get transcript using yt-dlp"""
     try:
         ydl_opts = {
             'writeautomaticsub': True,
             'skip_download': True,
-            'quiet': True
+            'quiet': True,
+            # Add these options to help avoid the bot detection
+            'no_warnings': True,
+            'ignoreerrors': True,
+            # Add cookies if needed
+            'cookiefile': 'cookies.txt',
         }
         
         with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-            if 'automatic_captions' in info and 'en' in info['automatic_captions']:
-                captions = info['automatic_captions']['en']
+            url = f"{video_url}"
+            info = ydl.extract_info(url, download=False)
+            
+            if info and 'automatic_captions' in info:
+                # Try to get English captions
+                captions = info['automatic_captions'].get('en', [])
+                if not captions:
+                    # Fallback to any available captions
+                    captions = next(iter(info['automatic_captions'].values()), [])
+                    
                 return ' '.join(caption['text'] for caption in captions if 'text' in caption)
+                
     except Exception as e:
         logger.error(f"Error getting transcript: {str(e)}")
     return ""
 
-def analyze_transcript_compliance(video_id: str) -> tuple:
+def analyze_transcript_compliance(video_url: str) -> tuple:
     """Analyzes video transcript for compliance matches"""
     try:
-        script_text = get_transcript(video_id)
+        script_text = get_transcript(video_url)
         if not script_text:
             return "", pd.DataFrame(), {}
             
