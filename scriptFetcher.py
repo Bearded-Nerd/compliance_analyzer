@@ -35,7 +35,7 @@ def analyze_transcript_compliance(transcript_text):
                 continue
         
         # Create DataFrame from matches
-        results = pd.DataFrame(matches) if matches else pd.DataFrame(columns=['Word', 'Risk Rating'])
+        results = pd.DataFrame(matches) if matches else pd.DataFrame(columns=['Word', 'Risk_Rating'])
         
         return transcript_text, results, {}  # Empty dict for positions as we're not using them
         
