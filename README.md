@@ -79,6 +79,22 @@ This application can be deployed on Render.com:
    - Build Command: `pip install -r requirements.txt`
    - Start Command: `gunicorn app:app`
 
+## Deployment to Render
+
+1. In Google Cloud Console:
+   - Add your Render domain to authorized domains
+   - Add `https://your-app.onrender.com/oauth2callback` to authorized redirect URIs
+
+2. In Render.com, set these environment variables:
+   - RENDER=true
+   - GOOGLE_CLIENT_SECRETS=(contents of your client_secrets.json)
+   - FLASK_SECRET_KEY=(your secret key)
+   - GOOGLE_OAUTH_CREDENTIALS=(will be populated after first OAuth flow)
+
+3. Deploy your application:
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `gunicorn app:app`
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
