@@ -9,44 +9,36 @@ def analyze_transcript_compliance(transcript_text):
         # Load compliance word list
         compliance_df = pd.read_csv('compliant_word_list.csv')
         
+        # Initialize empty list for matches
+        matches = []
+        
         # Convert transcript to lowercase for case-insensitive matching
         transcript_lower = transcript_text.lower()
         
-        # Find matches and their positions
-        matches = []
-        word_positions = {}
-        
-        for _, row in compliance_df.iterrows():
-            word = row['Word'].lower()
-            risk = row['Risk Rating']
-            
-            # Find all occurrences of the word
-            start = 0
-            while True:
-                pos = transcript_lower.find(word, start)
-                if pos == -1:
-                    break
-                    
-                matches.append({
-                    'Word': row['Word'],
-                    'Risk Rating': risk,
-                    'Position': pos
-                })
+        # Iterate through compliance words
+        for index, row in compliance_df.iterrows():
+            try:
+                word = str(row['Word']).lower()  # Ensure word is string and lowercase
+                risk = str(row['Risk Rating'])   # Ensure risk is string
                 
-                # Store position for highlighting
-                word_positions[pos] = {
-                    'word': row['Word'],
-                    'length': len(word),
-                    'risk': risk
-                }
-                
-                start = pos + 1
+                # Check if word appears in transcript
+                if word in transcript_lower:
+                    matches.append({
+                        'Word': str(row['Word']),  # Use original case from CSV
+                        'Risk Rating': risk
+                    })
+            except KeyError as e:
+                logger.error(f"Column missing in CSV: {e}")
+                continue
+            except Exception as e:
+                logger.error(f"Error processing word: {e}")
+                continue
         
-        # Convert matches to DataFrame for consistent output
-        results = pd.DataFrame(matches)
+        # Create DataFrame from matches
+        results = pd.DataFrame(matches) if matches else pd.DataFrame(columns=['Word', 'Risk Rating'])
         
-        return transcript_text, results, word_positions
+        return transcript_text, results, {}  # Empty dict for positions as we're not using them
         
     except Exception as e:
-        logger.error(f"Error analyzing transcript: {str(e)}")
+        logger.error(f"Error analyzing transcript: {e}")
         raise
