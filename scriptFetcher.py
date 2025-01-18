@@ -1,44 +1,114 @@
 import pandas as pd
-from yt_dlp import YoutubeDL
 import logging
+import pickle
+import os.path
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from google.oauth2.credentials import Credentials
+from os import environ
 
 logger = logging.getLogger(__name__)
 
-def get_transcript(video_url: str) -> str:
-    """Get transcript using yt-dlp"""
-    try:
-        ydl_opts = {
-            'writeautomaticsub': True,
-            'skip_download': True,
-            'quiet': True,
-            # Add these options to help avoid the bot detection
-            'no_warnings': True,
-            'ignoreerrors': True,
-            # Add cookies if needed
-            'cookiefile': 'cookies.txt',
-        }
+# If modifying these scopes, delete the file token.pickle.
+SCOPES = ['https://www.googleapis.com//auth/userinfo.email','https://www.googleapis.com/auth/youtube.force-ssl']
+
+def get_youtube_service():
+    """Get authenticated YouTube service"""
+    creds = None
+    
+    # Try to load credentials from environment variable first (for Render)
+    if environ.get('GOOGLE_OAUTH_CREDENTIALS'):
+        try:
+            creds_dict = pickle.loads(environ.get('GOOGLE_OAUTH_CREDENTIALS').encode())
+            creds = Credentials.from_authorized_user_info(creds_dict, SCOPES)
+        except Exception as e:
+            logger.error(f"Error loading credentials from environment: {str(e)}")
+    
+    # If no environment credentials, try local file
+    if not creds and os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                # Save refreshed credentials
+                if environ.get('RENDER'):
+                    # Save to environment variable for Render
+                    environ['GOOGLE_OAUTH_CREDENTIALS'] = pickle.dumps(creds.to_authorized_user_info())
+                else:
+                    # Save locally for development
+                    with open('token.pickle', 'wb') as token:
+                        pickle.dump(creds, token)
+            except Exception as e:
+                logger.error(f"Error refreshing token: {str(e)}")
+                creds = None
         
-        with YoutubeDL(ydl_opts) as ydl:
-            url = f"{video_url}"
-            info = ydl.extract_info(url, download=False)
+        if not creds:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'client_secrets.json' if not environ.get('GOOGLE_CLIENT_SECRETS') else environ.get('GOOGLE_CLIENT_SECRETS'),
+                SCOPES,
+                redirect_uri='https://your-render-domain.onrender.com/oauth2callback' if environ.get('RENDER') else 'http://localhost:8080/oauth2callback'
+            )
+            creds = flow.run_local_server(
+                port=8080,
+                access_type='offline',
+                include_granted_scopes='true',
+                prompt='consent'  # Force prompt to ensure we get refresh token
+            )
             
-            if info and 'automatic_captions' in info:
-                # Try to get English captions
-                captions = info['automatic_captions'].get('en', [])
-                if not captions:
-                    # Fallback to any available captions
-                    captions = next(iter(info['automatic_captions'].values()), [])
-                    
-                return ' '.join(caption['text'] for caption in captions if 'text' in caption)
-                
+            # Save the credentials
+            if environ.get('RENDER'):
+                environ['GOOGLE_OAUTH_CREDENTIALS'] = pickle.dumps(creds.to_authorized_user_info())
+            else:
+                with open('token.pickle', 'wb') as token:
+                    pickle.dump(creds, token)
+
+    return build('youtube', 'v3', credentials=creds)
+
+def get_transcript(video_id: str) -> str:
+    """Get transcript using YouTube Data API with OAuth"""
+    try:
+        youtube = get_youtube_service()
+        
+        # Get video captions
+        captions_response = youtube.captions().list(
+            part='snippet',
+            videoId=video_id
+        ).execute()
+        
+        # Get the first available caption track
+        if 'items' in captions_response and captions_response['items']:
+            caption_id = captions_response['items'][0]['id']
+            
+            # Download the caption track
+            caption = youtube.captions().download(
+                id=caption_id,
+                tfmt='srt'
+            ).execute()
+            
+            # Convert caption to text
+            return ' '.join(line for line in caption.decode('utf-8').split('\n') 
+                          if not line.strip().isdigit() and 
+                          not '-->' in line and 
+                          line.strip())
+        
+        return ""
+        
+    except HttpError as e:
+        logger.error(f"YouTube API error: {str(e)}")
+        return ""
     except Exception as e:
         logger.error(f"Error getting transcript: {str(e)}")
-    return ""
+        return ""
 
-def analyze_transcript_compliance(video_url: str) -> tuple:
+def analyze_transcript_compliance(video_id: str) -> tuple:
     """Analyzes video transcript for compliance matches"""
     try:
-        script_text = get_transcript(video_url)
+        script_text = get_transcript(video_id)
         if not script_text:
             return "", pd.DataFrame(), {}
             
