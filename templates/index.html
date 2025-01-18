@@ -17,46 +17,30 @@
 </head>
 <body class="min-h-screen bg-gray-100 p-8">
     <div class="max-w-2xl mx-auto bg-white rounded-lg shadow p-6">
-        <h1 class="text-2xl font-bold mb-6">YouTube Script Compliance Checker</h1>
+        <h1 class="text-2xl font-bold mb-6">Script Compliance Checker</h1>
         
         <form id="analyzeForm" class="mb-6">
-            <div class="flex gap-4">
-                <input 
-                    type="text" 
-                    id="video_id" 
-                    name="video_id" 
-                    placeholder="Enter YouTube Video ID" 
+            <div class="flex flex-col gap-4">
+                <textarea 
+                    id="transcript" 
+                    name="transcript" 
+                    placeholder="Paste your transcript here" 
                     required
-                    class="flex-1 border rounded p-2"
-                >
+                    class="w-full h-40 border rounded p-2"
+                ></textarea>
                 <button 
                     type="submit" 
-                    class="bg-blue-500 text-white px-4 py-2 rounded"
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
                 >
                     Analyze
                 </button>
             </div>
         </form>
 
-        <div id="loading" class="hidden text-center">Analyzing...</div>
-        <div id="error" class="hidden text-red-500 mb-4"></div>
-
         <div id="results" class="hidden">
-            <div id="transcriptContainer" class="mb-6">
-                <h2 class="text-xl mb-2">Transcript</h2>
-                <div id="highlightedTranscript" class="border rounded"></div>
-            </div>
-
-            <h2 class="text-xl mb-2">Compliance Issues</h2>
-            <table class="w-full">
-                <thead>
-                    <tr class="border-b">
-                        <th class="text-left py-2">Word</th>
-                        <th class="text-left py-2">Risk Level</th>
-                    </tr>
-                </thead>
-                <tbody id="resultsTable"></tbody>
-            </table>
+            <h2 class="text-xl font-bold mb-4">Results</h2>
+            <div id="matchesList" class="mb-4"></div>
+            <div id="highlightedTranscript" class="border rounded bg-gray-50"></div>
         </div>
     </div>
 
@@ -64,41 +48,42 @@
         document.getElementById('analyzeForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const loading = document.getElementById('loading');
-            const error = document.getElementById('error');
+            const form = e.target;
             const results = document.getElementById('results');
-            
-            loading.classList.remove('hidden');
-            error.classList.add('hidden');
-            results.classList.add('hidden');
+            const matchesList = document.getElementById('matchesList');
+            const highlightedTranscript = document.getElementById('highlightedTranscript');
             
             try {
                 const response = await fetch('/analyze', {
                     method: 'POST',
-                    body: new FormData(e.target)
+                    body: new FormData(form)
                 });
                 
                 const data = await response.json();
                 
-                if (!response.ok) throw new Error(data.error);
-                
-                // Display results
-                document.getElementById('highlightedTranscript').textContent = data.transcript;
-                
-                const tbody = document.getElementById('resultsTable');
-                tbody.innerHTML = data.matches.map(match => `
-                    <tr class="border-b">
-                        <td class="py-2">${match.Word}</td>
-                        <td class="py-2 risk-${match.Risk_Rating.toLowerCase()}">${match.Risk_Rating}</td>
-                    </tr>
-                `).join('');
-                
-                results.classList.remove('hidden');
-            } catch (err) {
-                error.textContent = err.message;
-                error.classList.remove('hidden');
-            } finally {
-                loading.classList.add('hidden');
+                if (response.ok) {
+                    // Show results section
+                    results.classList.remove('hidden');
+                    
+                    // Display matches
+                    const matchesHtml = data.matches
+                        .sort((a, b) => b.Risk_Rating - a.Risk_Rating)
+                        .map(match => `
+                            <div class="risk-${match['Risk Rating'].toLowerCase()} mb-1">
+                                "${match.Word}" - ${match['Risk Rating']} Risk
+                            </div>
+                        `)
+                        .join('');
+                    
+                    matchesList.innerHTML = matchesHtml || 'No compliance issues found';
+                    
+                    // Display highlighted transcript
+                    highlightedTranscript.textContent = data.transcript;
+                } else {
+                    throw new Error(data.error || 'Analysis failed');
+                }
+            } catch (error) {
+                alert(error.message);
             }
         });
     </script>
