@@ -19,7 +19,7 @@ def analyze_transcript_compliance(transcript_text):
         for index, row in compliance_df.iterrows():
             try:
                 word = str(row['Word']).lower()  # Ensure word is string and lowercase
-                risk = str(row['Risk Rating'])   # Ensure risk is string
+                risk = str(row['Risk_Rating'])   # Ensure risk is string
                 
                 # Check if word appears in transcript
                 if word in transcript_lower:
